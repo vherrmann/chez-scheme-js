@@ -1,6 +1,6 @@
 // @ts-ignore
-import runScheme from './scheme/scheme.js';
-import fs, { realpath } from 'fs';
+import runScheme from './chez/scheme.js';
+import fs from 'fs';
 import path from 'path';
 import { WorkerData } from './types.js';
 
@@ -125,8 +125,8 @@ addEventListener('message', (ev: MessageEvent<WorkerData>) => {
                 }
             };
     
-            loadFile('/petite.boot', './scheme/petite.boot');
-            loadFile('/scheme.boot', './scheme/scheme.boot');
+            loadFile('/petite.boot', './chez/petite.boot');
+            loadFile('/scheme.boot', './chez/scheme.boot');
         }
     };
     
