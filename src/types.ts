@@ -3,7 +3,15 @@ export interface WorkerData {
     argv: string[];
 }
 
-export interface WorkerResponse {
-    type: 'stdout' | 'stderr';
-    data: string;
+interface WorkerResponses {
+    stdout: string;
+    stderr: string;
+    exit: undefined;
 }
+
+export type WorkerResponse = {
+    [Type in keyof WorkerResponses]:
+        WorkerResponses[Type] extends undefined
+            ? { type: Type, data?: WorkerResponses[Type] }
+            : { type: Type, data: WorkerResponses[Type] }
+}[keyof WorkerResponses];

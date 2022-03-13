@@ -26,6 +26,8 @@ worker.addEventListener('message', (ev: MessageEvent<WorkerResponse>) => {
         case 'stderr':
             process.stderr.write(data);
             break;
+        case 'exit':
+            process.exit(0);
     }
 });
 

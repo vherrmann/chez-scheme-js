@@ -1,13 +1,16 @@
 // @ts-ignore
-import runScheme from './chez/scheme.js';
-import fs from 'fs';
+import loadScheme from './chez/scheme.js';
+import { readFile } from 'fs/promises';
+import { readFileSync } from 'fs';
 import path from 'path';
-import { WorkerData } from './types.js';
+import { WorkerData, WorkerResponse } from './types.js';
+
+declare function postMessage(data: WorkerResponse): void;
 
 console.log = (str: string) => postMessage({ type: 'stdout', data: str + '\n' });
 console.error = (str: string) => postMessage({ type: 'stderr', data: str + '\n' });
 
-addEventListener('message', (ev: MessageEvent<WorkerData>) => {
+addEventListener('message', async (ev: MessageEvent<WorkerData>) => {
     const {
         sharedStdinBuffer,
         argv
@@ -38,7 +41,6 @@ addEventListener('message', (ev: MessageEvent<WorkerData>) => {
     }
 
     const Module = {
-        FS: undefined as any,
         arguments: argv,
         stdin() {
             if (followingNewline) {
@@ -66,69 +68,70 @@ addEventListener('message', (ev: MessageEvent<WorkerData>) => {
         stderr(char: number) {
             postMessage({ type: 'stderr', data: String.fromCharCode(char) });
         },
-        preRun() {
-            const FS = Module.FS;
-            
-            function createDir(dirname: string) {
-                const pathParts = dirname.split('/');
-                if (pathParts[0] === '') {
-                    pathParts.shift();
-                    pathParts[0] = `/${pathParts[0] ?? ''}`;
-                }
-
-                let path = '';
-                for (const part of pathParts) {
-                    path += '/' + part;
-                    try {
-                        FS.stat(path);
-                    }
-                    catch (e) {
-                        FS.mkdir(path);
-                    }
-                }
-            }
-
-            function loadFile(fsPath: string, realPath: string, base = __dirname) {
-                const data = fs.readFileSync(path.join(base, realPath));
-                const mode = FS.getMode(true, true);
-                
-                createDir(path.dirname(fsPath));
-
-                const node = FS.create(fsPath, mode);
-                FS.chmod(node, mode | 146);
-                const stream = FS.open(node, 577);
-                FS.write(stream, data, 0, data.length, 0, true);
-                FS.close(stream);
-                FS.chmod(node, mode);
-            }
-
-            const lookupPath = FS.lookupPath;
-            FS.lookupPath = (fsPath: string, opts: any) => {
-                try {
-                    return lookupPath(fsPath, opts);
-                }
-                catch (e) {
-                    console.log(`Must create file for ${fsPath}, ${JSON.stringify(opts)}`)
-                    let realPath = fsPath;
-                    // if (fsPath.includes('.chezscheme')) {
-                    //     // This is a Racket-on-CS file
-                    //     realPath = realPath.replace('.chezscheme', '');
-                    //     if (['.so', '.pb'].includes(path.extname(realPath))) {
-                    //         realPath = path.join('c', realPath);
-                    //     }
-                    //     if (realPath.endsWith('.pb')) {
-                    //         realPath = realPath.slice(0, -3) + '.wpo'
-                    //     }
-                    // }
-                    loadFile(fsPath, realPath, process.cwd());
-                    return lookupPath(fsPath, opts);
-                }
-            };
+        onExit() {
+            postMessage({ type: 'exit' });
+        }
+    } as any;
     
-            loadFile('/petite.boot', './chez/petite.boot');
-            loadFile('/scheme.boot', './chez/scheme.boot');
+    loadScheme(Module);
+
+    const FS = Module.$internal('FS');
+            
+    function createDir(dirname: string) {
+        const pathParts = dirname.split('/');
+        if (pathParts[0] === '') {
+            pathParts.shift();
+            pathParts[0] = `/${pathParts[0] ?? ''}`;
+        }
+
+        let path = '';
+        for (const part of pathParts) {
+            path += '/' + part;
+            try {
+                FS.stat(path);
+            }
+            catch (e) {
+                FS.mkdir(path);
+            }
+        }
+    }
+
+    function loadFile(fsPath: string, data: Buffer) {
+        createDir(path.dirname(fsPath));
+        
+        const mode = FS.getMode(true, true);
+        const node = FS.create(fsPath, mode);
+        FS.chmod(node, mode | 146);
+        const stream = FS.open(node, 577);
+        FS.write(stream, data, 0, data.length, 0, true);
+        FS.close(stream);
+        FS.chmod(node, mode);
+    }
+
+    async function preloadFile(fsPath: string, data: Buffer | Promise<Buffer>) {
+        const addRunDependency = Module.$internal('addRunDependency');
+        const removeRunDependency = Module.$internal('removeRunDependency');
+
+        const depName = `preloadFile ${fsPath}`;
+        addRunDependency(depName);
+        loadFile(fsPath, await data);
+        removeRunDependency(depName);
+    }
+
+    const lookupPath = FS.lookupPath;
+    FS.lookupPath = (fsPath: string, opts: any) => {
+        try {
+            return lookupPath(fsPath, opts);
+        }
+        catch (e) {
+            let realPath = fsPath;
+            loadFile(fsPath, readFileSync(path.join(realPath, process.cwd())));
+            return lookupPath(fsPath, opts);
         }
     };
-    
-    runScheme(Module);    
+
+    Module.preRun = () => {
+        preloadFile('/petite.boot', readFile(path.join(__dirname, './chez/petite.boot')));
+        preloadFile('/scheme.boot', readFile(path.join(__dirname, './chez/scheme.boot')));
+    };
 });
