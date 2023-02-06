@@ -1,14 +1,7 @@
-// @ts-ignore
 import loadScheme from './chez/scheme.js';
-import { readFile } from 'fs/promises';
-import { readFileSync } from 'fs';
-import path from 'path';
 import { WorkerData, WorkerResponse } from './types.js';
 
 declare function postMessage(data: WorkerResponse): void;
-
-console.log = (str: string) => postMessage({ type: 'stdout', data: str + '\n' });
-console.error = (str: string) => postMessage({ type: 'stderr', data: str + '\n' });
 
 addEventListener('message', async (ev: MessageEvent<WorkerData>) => {
     const {
@@ -16,12 +9,14 @@ addEventListener('message', async (ev: MessageEvent<WorkerData>) => {
         argv
     } = ev.data;
 
-    // First four bytes are our lock
-    const stdinDataAvailable = new Int32Array(sharedStdinBuffer, 0, 4);
+    // First four bytes are our stdin lock
+    const stdinDataAvailable = new Int32Array(sharedStdinBuffer, 0, 1);
+    // Next four indicate whether stdin is needed
+    const stdinDataRequested = new Int32Array(sharedStdinBuffer, 4, 1);
     // Next two are the payload size
-    const stdinDataSize = new Int16Array(sharedStdinBuffer, 4, 2);
+    const stdinDataSize = new Int16Array(sharedStdinBuffer, 8, 1);
     // Rest is the payload
-    const stdinData = new Int16Array(sharedStdinBuffer, 6);
+    const stdinData = new Int8Array(sharedStdinBuffer, 10);
 
     const stdinBuffer = [] as number[];
     
@@ -29,44 +24,34 @@ addEventListener('message', async (ev: MessageEvent<WorkerData>) => {
         stdinBuffer.push(...stdinData.slice(0, stdinDataSize[0]));
     }
 
-    let followingNewline = false;
-
     function readCharFromStdinBuffer() {
         const char = stdinBuffer.shift();
-        if (char === 10) {
-            // Char code 10 is a newline
-            followingNewline = true;
-        }
         return char;
     }
 
     const Module = {
         arguments: argv,
         stdin() {
-            if (followingNewline) {
-                // We need to send a null byte in order
-                // to terminate the input.
-                followingNewline = false;
-                return null;
-            }
-
             if (stdinBuffer.length > 0) {
-                return readCharFromStdinBuffer();
+                return readCharFromStdinBuffer() || null;
             }
 
-            // Sleep while no data is available
-            Atomics.wait(stdinDataAvailable, 0, 0);
-            flushStdin();
-            // Once data is consumed, unset the data available flag
-            Atomics.store(stdinDataAvailable, 0, 0);
-
-            return readCharFromStdinBuffer() ?? null;
+            while (stdinBuffer.length === 0) {
+                // Request data
+                Atomics.store(stdinDataRequested, 0, 1);
+                // Sleep while no data is available
+                Atomics.wait(stdinDataAvailable, 0, 0);
+                flushStdin();
+                // Once data is consumed, unset the data available flag
+                Atomics.store(stdinDataAvailable, 0, 0);
+            }
+            return readCharFromStdinBuffer() || null;
         },
         stdout(char: number) {
-            postMessage({ type: 'stdout', data: String.fromCharCode(char) });
+            postMessage({ type: 'stdout', data: char });
         },
         stderr(char: number) {
-            postMessage({ type: 'stderr', data: String.fromCharCode(char) });
+            postMessage({ type: 'stderr', data: char });
         },
         onExit() {
             postMessage({ type: 'exit' });
@@ -96,8 +81,8 @@ addEventListener('message', async (ev: MessageEvent<WorkerData>) => {
         }
     }
 
-    function loadFile(fsPath: string, data: Buffer) {
-        createDir(path.dirname(fsPath));
+    function loadFile(fsPath: string, data: Uint8Array) {
+        createDir(fsPath.replace(/\/[^/]*\/?$/, '') || '/');
         
         const mode = FS.getMode(true, true);
         const node = FS.create(fsPath, mode);
@@ -108,30 +93,18 @@ addEventListener('message', async (ev: MessageEvent<WorkerData>) => {
         FS.chmod(node, mode);
     }
 
-    async function preloadFile(fsPath: string, data: Buffer | Promise<Buffer>) {
+    async function preloadFile(fsPath: string, url: URL) {
         const addRunDependency = Module.$internal('addRunDependency');
         const removeRunDependency = Module.$internal('removeRunDependency');
 
         const depName = `preloadFile ${fsPath}`;
         addRunDependency(depName);
-        loadFile(fsPath, await data);
+        loadFile(fsPath, new Uint8Array(await (await fetch(url.toString())).arrayBuffer()));
         removeRunDependency(depName);
     }
 
-    const lookupPath = FS.lookupPath;
-    FS.lookupPath = (fsPath: string, opts: any) => {
-        try {
-            return lookupPath(fsPath, opts);
-        }
-        catch (e) {
-            let realPath = fsPath;
-            loadFile(fsPath, readFileSync(path.join(realPath, process.cwd())));
-            return lookupPath(fsPath, opts);
-        }
-    };
-
     Module.preRun = () => {
-        preloadFile('/petite.boot', readFile(path.join(__dirname, './chez/petite.boot')));
-        preloadFile('/scheme.boot', readFile(path.join(__dirname, './chez/scheme.boot')));
+        preloadFile('/petite.boot', new URL('./chez/petite.boot', import.meta.url));
+        // preloadFile('/scheme.boot', new URL('./chez/scheme.boot', import.meta.url));
     };
 });

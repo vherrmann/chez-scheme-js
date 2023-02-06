@@ -4,8 +4,8 @@ export interface WorkerData {
 }
 
 interface WorkerResponses {
-    stdout: string;
-    stderr: string;
+    stdout: number;
+    stderr: number;
     exit: undefined;
 }
 

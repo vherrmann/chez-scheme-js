@@ -1,23 +1,45 @@
 # scheme-js
 Chez Scheme on the web
 
-## How to build Chez Scheme
+## Browser
 
-We use Racket's modified Chez Scheme, which has support for compilation to WASM via Emscripten.
+`scheme-js` uses `SharedArrayBuffer`, which requires the COOP and COEP security
+headers to be set and for there to be a secure context (either localhost or https).
 
-You will need `gcc`, `make`, `sh`, and similar programs. If ydou are using Windows, we recommend using WSL.
+```http
+Cross-Origin-Opener-Policy: same-origin
+// And one of:
+Cross-Origin-Embedder-Policy: require-corp
+Cross-Origin-Embedder-Policy: credentialless
+```
 
-1. [Install Emscripten](https://emscripten.org/docs/getting_started/downloads.html)
-2. Clone [Racket](https://github.com/racket/racket), or just [Racket's Chez Scheme](https://github.com/racket/ChezScheme)
-3. Navigate to `racket/src/ChezScheme` (for racket/racket), or just the root directory (for racket/ChezScheme)
-4. Run `./configure --emscripten`
-    * Add the `--empetite` flag for Petite Chez Scheme
-5. Run `make`
-6. Navigate to `em-pb/c`
-7. Run `emcc -DDISABLE_ICONV -s USE_ZLIB=1 -O2 -Wpointer-arith -Wall -Wextra -Wno-implicit-fallthrough -s EXIT_RUNTIME=1 -s ALLOW_MEMORY_GROWTH=1 -s MODULARIZE=1 -o ../bin/pb/scheme.js ../boot/pb/main.o ../boot/pb/libkernel.a ../lz4/lib/liblz4.a`
-8. Copy `scheme.wasm` and `scheme.js` from `em-pb/bin/pb`, and `scheme.boot` and `petite.boot` from `em-pb/boot/pb` into `chez` (in scheme-js)
-    * If you used `--empetite` you do not need `scheme.boot`.
-    * If you're having trouble copying the boot files because they're symbolic links, the original files are in `em-pb/c`.
-9. Run `node process-scheme.js`
+## Node.js
 
-Note: Step 7 is included because while the default Scheme-emscripten build is intended to work out-of-the-box, we do our own special stuff and so we don't want the boot files to be hard-coded and packed into one file.
+Node.js is currently unsupported. There is no technical reason it couldn't be,
+but figuring out a build system that will support both Node.js and browsers takes some work.
+PRs to do this will be accepted.
+
+## Development
+
+Run `npm i` to install dependencies.
+
+This project uses Racket's modified Chez Scheme, which has support for compilation to WASM via Emscripten.
+The binaries for it are not checked in, and you will need to compile them yourself.
+
+### Compiling Chez Scheme
+
+You will need `gcc`, `make`, `sh`, and similar programs. If you are using Windows, I recommend using WSL.
+You will also need to [install Emscripten](https://emscripten.org/docs/getting_started/downloads.html).
+
+Once you have everything installed, run `npm run build-chez`.
+This will generate a custom WebAssembly build of Chez Scheme,
+copy the relevant artifacts into `src/chez`, and then patch the
+JavaScript file so that `scheme-js` can interface with certain internals.
+
+### Building
+
+This project uses Webpack, and it can be compiled with `npm run build` or watched with `npm run watch`.
+
+### Testing
+
+Currently there are no automated tests. There is a playground which can be run with `npm start`
