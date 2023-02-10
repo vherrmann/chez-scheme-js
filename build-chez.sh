@@ -62,4 +62,4 @@ fi
 
 cd ../..
 
-node process-scheme.js
+node process-scheme.cjs

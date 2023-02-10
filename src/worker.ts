@@ -60,7 +60,7 @@ addEventListener('message', async (ev: MessageEvent<WorkerData>) => {
     
     loadScheme(Module);
 
-    const FS = Module.$internal('FS');
+    const FS = Module.FS;
             
     function createDir(dirname: string) {
         const pathParts = dirname.split('/');
@@ -94,8 +94,8 @@ addEventListener('message', async (ev: MessageEvent<WorkerData>) => {
     }
 
     async function preloadFile(fsPath: string, url: URL) {
-        const addRunDependency = Module.$internal('addRunDependency');
-        const removeRunDependency = Module.$internal('removeRunDependency');
+        const addRunDependency = Module.addRunDependency;
+        const removeRunDependency = Module.removeRunDependency;
 
         const depName = `preloadFile ${fsPath}`;
         addRunDependency(depName);

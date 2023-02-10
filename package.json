@@ -1,13 +1,25 @@
 {
+    "name": "scheme-js",
+    "version": "1.0.0",
+    "description": "Chez Scheme on the web w/ WASM and Workers",
+    "sideEffects": false,
+    "main": "dist/index.js",
+    "types": "dist/index.d.ts",
+    "type": "module",
+    "author": "Trevor Paley",
+    "license": "MIT",
+    "files": [
+        "dist"
+    ],
     "scripts": {
         "build-chez": "rimraf src/chez && ./build-chez.sh",
-        "build": "npm run clean && webpack",
+        "build": "npm run clean && webpack --mode=production",
         "watch": "webpack --watch",
         "start": "serve",
+        "prepack": "npm run build",
         "clean": "rimraf dist"
     },
     "dependencies": {
-        "@types/uuid": "^9.0.0",
         "async-mutex": "^0.4.0",
         "uuid": "^9.0.0",
         "web-worker": "^1.2.0"
@@ -15,6 +27,7 @@
     "devDependencies": {
         "@types/isomorphic-fetch": "^0.0.36",
         "@types/node": "^18.11.19",
+        "@types/uuid": "^9.0.0",
         "rimraf": "^4.1.2",
         "serve": "^14.2.0",
         "ts-loader": "^9.4.2",

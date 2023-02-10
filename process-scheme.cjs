@@ -3,6 +3,7 @@ const path = require('path');
 
 const SCHEME_JS_FILE_PATH = path.join(__dirname, 'src/chez/scheme.js');
 
+/** @type {string} */
 let data;
 
 try {
@@ -15,9 +16,22 @@ catch (e) {
 
 const SEARCH_STRING = 'return Module.ready'
 if (data.includes(SEARCH_STRING)) {
-    const INJECTION = 'Module["$internal"]=name=>eval(name);';
+    const INJECTION = `
+    Module.addRunDependency=addRunDependency;
+    Module.removeRunDependency=removeRunDependency;
+    Module.FS=FS;
+    `;
     if (!data.includes(INJECTION)) {
         data = data.replace(SEARCH_STRING, INJECTION + SEARCH_STRING);
+        // Remove unnecessary code about searching for file on the real FS
+        // (we only use the virtual FS)
+        data = data.replace(/Module\["locateFile"]/g, 'undefined');
+        data = data.replace(/(?:var )?scriptDirectory=/g, '');
+        data = data.replace(/scriptDirectory/g, '""');
+        // Override feature detection to eliminate unnecessary code
+        data = data.replace(/typeof window/g, '"undefined"');
+        data = data.replace(/typeof importScripts/g, '"undefined"');
+        data = data.replace(/typeof process/g, '"undefined"');
     }
     else {
         console.error(`The scheme binary has already been processed`);
