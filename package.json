@@ -1,5 +1,5 @@
 {
-    "name": "scheme-js",
+    "name": "chez-scheme-js",
     "version": "1.0.0",
     "description": "Chez Scheme on the web w/ WASM and Workers",
     "sideEffects": false,

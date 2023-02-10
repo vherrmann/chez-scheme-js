@@ -1,9 +1,9 @@
-# scheme-js
+# chez-scheme-js
 Chez Scheme on the web
 
 ## Browser
 
-`scheme-js` uses `SharedArrayBuffer`, which requires the COOP and COEP security
+`chez-scheme-js` uses `SharedArrayBuffer`, which requires the COOP and COEP security
 headers to be set and for there to be a secure context (either localhost or https).
 
 ```http
@@ -34,7 +34,7 @@ You will also need to [install Emscripten](https://emscripten.org/docs/getting_s
 Once you have everything installed, run `npm run build-chez`.
 This will generate a custom WebAssembly build of Chez Scheme,
 copy the relevant artifacts into `src/chez`, and then patch the
-JavaScript file so that `scheme-js` can interface with certain internals.
+JavaScript file so that `chez-scheme-js` can interface with certain internals.
 
 ### Building
 
