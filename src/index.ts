@@ -8,6 +8,7 @@ export default class Scheme {
     private worker?: Worker;
 
     // Options
+    private readonly WORKER_URL?: string | URL;
     private readonly STDIN_MAX_PACKET_SIZE: number;
     private readonly STDOUT_INITIAL_PACKET_SIZE: number;
     private readonly error: (message: string) => void;
@@ -27,10 +28,18 @@ export default class Scheme {
     private prompt = '>';
 
     constructor({
+        /**
+         * In some cases you may need to use a custom worker,
+         * especially when dealing with certain bundlers.
+         * Generally you will want this worker to be a simple wrapper
+         * around using importing the original worker.
+         */
+        workerUrl = undefined as string | URL | undefined,
         stdinMaxPacketSize = 256,
         stdoutInitialPacketSize = 256,
         error = console.error as (message: string) => void,
-    }) {
+    } = {}) {
+        this.WORKER_URL = workerUrl;
         this.STDIN_MAX_PACKET_SIZE = stdinMaxPacketSize;
         this.STDOUT_INITIAL_PACKET_SIZE = stdoutInitialPacketSize;
         this.error = error;
@@ -42,7 +51,7 @@ export default class Scheme {
         }
 
         const sharedStdinBuffer = new SharedArrayBuffer(4 + 2 + this.STDIN_MAX_PACKET_SIZE * 2);
-        this.worker = new Worker(new URL('./worker.ts', import.meta.url));
+        this.worker = new Worker(this.WORKER_URL ?? new URL('./worker.js', import.meta.url), { type: 'module' });
 
         // First four bytes are our lock
         this.stdinDataAvailable = new Int32Array(sharedStdinBuffer, 0, 1);
