@@ -2,3 +2,4 @@ node_modules
 src/chez
 dist
 *.tgz
+.direnv
