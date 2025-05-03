@@ -12,6 +12,7 @@ export default class Scheme {
     private readonly STDIN_MAX_PACKET_SIZE: number;
     private readonly STDOUT_INITIAL_PACKET_SIZE: number;
     private readonly error: (message: string) => void;
+    private readonly argv: string[];
 
     // Writing
     private stdinDataAvailable!: Int32Array;
@@ -38,14 +39,16 @@ export default class Scheme {
         stdinMaxPacketSize = 256,
         stdoutInitialPacketSize = 256,
         error = console.error as (message: string) => void,
+        argv = [] as string[],
     } = {}) {
         this.WORKER_URL = workerUrl;
         this.STDIN_MAX_PACKET_SIZE = stdinMaxPacketSize;
         this.STDOUT_INITIAL_PACKET_SIZE = stdoutInitialPacketSize;
         this.error = error;
+        this.argv = argv;
     }
 
-    async init(): Promise<string> {
+    async init(): Promise<{output: string, result: string[]}> {
         if (this.running) {
             throw new Error('Scheme is already running. If you want to restart Scheme, call destroy() first.');
         }
@@ -82,14 +85,14 @@ export default class Scheme {
 
         this.worker.postMessage({
             sharedStdinBuffer,
-            argv: [],
+            argv: this.argv,
         } as WorkerData);
 
         this.running = true;
 
         await this.waitForStdinRequestOrStop();
 
-        const output = this.getOutput()[0];
+        const output = this.getOutput();
 
         await this.runExpression(`
             (waiter-prompt-string "${this.prompt = uuidv4()}")
@@ -104,7 +107,7 @@ export default class Scheme {
 
     private runExpressionMutex = new Mutex();
 
-    async runExpression(expr: string): Promise<string[]> {
+    async runExpression(expr: string): Promise<{output: string, result: string[]}> {
         if (!this.running) {
             throw new Error('Cannot run an expression before calling init()');
         }
@@ -137,7 +140,10 @@ export default class Scheme {
         if (err) {
             this.error(err);
         }
-        return output.split(new RegExp(`\\n?${this.prompt} `)).filter(Boolean);
+        return {
+            output: output.replace(new RegExp(this.prompt, 'g'), ">"),
+            result: output.split(new RegExp(`\\n?${this.prompt} `)).filter(Boolean)
+        };
     }
 
     private waitingForStdin() {
