@@ -13,6 +13,7 @@ export default class Scheme {
     private readonly STDOUT_INITIAL_PACKET_SIZE: number;
     private readonly error: (message: string) => void;
     private readonly argv: string[];
+    private readonly onStdinWaitingChange: (waiting: boolean) => void;
 
     // Writing
     private stdinDataAvailable!: Int32Array;
@@ -40,18 +41,22 @@ export default class Scheme {
         stdoutInitialPacketSize = 256,
         error = console.error as (message: string) => void,
         argv = [] as string[],
+        onStdinWaitingChange = (waiting: boolean) => {},
     } = {}) {
         this.WORKER_URL = workerUrl;
         this.STDIN_MAX_PACKET_SIZE = stdinMaxPacketSize;
         this.STDOUT_INITIAL_PACKET_SIZE = stdoutInitialPacketSize;
         this.error = error;
         this.argv = argv;
+        this.onStdinWaitingChange = onStdinWaitingChange;
     }
 
     async init(): Promise<{output: string, result: string[]}> {
         if (this.running) {
             throw new Error('Scheme is already running. If you want to restart Scheme, call destroy() first.');
         }
+
+        this.running = true;
 
         const sharedStdinBuffer = new SharedArrayBuffer(4 + 2 + this.STDIN_MAX_PACKET_SIZE * 2);
         this.worker = new Worker(this.WORKER_URL ?? new URL('./worker.js', import.meta.url), { type: 'module' });
@@ -83,12 +88,11 @@ export default class Scheme {
             }
         });
 
+        this.onStdinWaitingChange(false);
         this.worker.postMessage({
             sharedStdinBuffer,
             argv: this.argv,
         } as WorkerData);
-
-        this.running = true;
 
         await this.waitForStdinRequestOrStop();
 
@@ -118,6 +122,7 @@ export default class Scheme {
             this.stdoutBufferCursor = 0;
             this.stderrBufferCursor = 0;
 
+            this.onStdinWaitingChange(false);
             await this.sendString(expr);
 
             // Ensure all of the output has printed
@@ -152,12 +157,14 @@ export default class Scheme {
 
     private async waitForStdinRequestOrStop() {
         if (this.waitingForStdin() || !this.running) {
+            this.onStdinWaitingChange(true);
             return;
         }
         return new Promise<void>(resolve => {
             const pollingInterval = setInterval(() => {
                 console.log('polling')
                 if (this.waitingForStdin()) {
+                    this.onStdinWaitingChange(true);
                     clearInterval(pollingInterval);
                     resolve();
                 }
